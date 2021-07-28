@@ -39,6 +39,7 @@
 #include "precomp.hpp"
 #include "edgeaware_filters_common.hpp"
 #include <limits>
+#include <opencv2/core/hal/intrin.hpp>
 
 namespace cv
 {
@@ -400,16 +401,47 @@ void DTFilterCPU::FilterRF_horPass<WorkVec>::operator()(const Range& range) cons
 
         if (iteration > 1)
         {
-            for (j = res.cols - 2; j >= 0; j--)
+            j = 0;
+#if CV_SIMD128
+            v_float32x4 a;
+            for (; j < res.cols - 4; j += 4) {
+                a = v_load((float*)adLine + j);
+                a *= a;
+                v_store((float*)adLine + j, a);                
+            }
+#endif
+            for (; j <= res.cols - 2; j++) {
                 adLine[j] *= adLine[j];
+            }
         }
 
-        for (j = 1; j < res.cols; j++)
+        j = 1;
+#if CV_SIMD128
+        v_float32x4 a, d1, d;
+        for (; j < res.cols - 3; j += 4) {
+            a = v_load((float*)adLine + j - 1);
+            d1 = v_load((float*)dstLine + j - 1);
+            d = v_load((float*)dstLine + j);
+            d += a * (d1 - d);
+            v_store((float*)dstLine + j, d);
+        }
+#endif
+        for (; j < res.cols; j++)
         {
             dstLine[j] += adLine[j-1] * (dstLine[j-1] - dstLine[j]);
         }
 
-        for (j = res.cols - 2; j >= 0; j--)
+        j = res.cols - 2;
+#if CV_SIMD128
+        for (; j >= 3; j -= 4) {
+            a = v_load((float*)adLine + j - 3);
+            d1 = v_load((float*)dstLine + j + 1 - 3);
+            d = v_load((float*)dstLine + j - 3);
+            d += a * (d1 - d);
+            v_store((float*)dstLine + j - 3, d);
+        }
+#endif
+        for (; j >= 0; j--)
         {
             dstLine[j] += adLine[j] * (dstLine[j+1] - dstLine[j]);
         }
@@ -440,14 +472,35 @@ void DTFilterCPU::FilterRF_vertPass<WorkVec>::operator()(const Range& range) con
         WorkVec     *curRow  = res.ptr<WorkVec>(i);
         WorkVec     *prevRow = res.ptr<WorkVec>(i - 1);
         DistType    *adRow   = alphaD.ptr<DistType>(i - 1);
+        int j;
 
         if (iteration > 1)
         {
-            for (int j = rcols.start; j < rcols.end; j++)
+            j = rcols.start;
+#if CV_SIMD128
+            v_float32x4 a;
+            for (; j < rcols.end - 3; j += 4) {
+                a = v_load((float*)adRow + j);
+                a *= a;
+                v_store((float*)adRow + j, a);
+            }
+#endif
+            for (; j < rcols.end; j++)
                 adRow[j] *= adRow[j];
         }
 
-        for (int j = rcols.start; j < rcols.end; j++)
+        j = rcols.start;
+#if CV_SIMD128
+        v_float32x4 a, c, p;
+        for (; j < rcols.end - 3; j += 4) {
+            a = v_load((float*)adRow + j);
+            c = v_load((float*)curRow + j);
+            p = v_load((float*)prevRow + j);
+            c += a * (p - c);
+            v_store((float*)curRow + j, c);
+        }
+#endif
+        for (; j < rcols.end; j++)
         {
             curRow[j] += adRow[j] * (prevRow[j] - curRow[j]);
         }
@@ -458,8 +511,20 @@ void DTFilterCPU::FilterRF_vertPass<WorkVec>::operator()(const Range& range) con
         WorkVec     *prevRow = res.ptr<WorkVec>(i + 1);
         WorkVec     *curRow  = res.ptr<WorkVec>(i);
         DistType    *adRow   = alphaD.ptr<DistType>(i);
+        int j;
 
-        for (int j = rcols.start; j < rcols.end; j++)
+        j = rcols.start;
+#if CV_SIMD128
+        v_float32x4 a, c, p;
+        for (; j < rcols.end - 3; j += 4) {
+            a = v_load((float*)adRow + j);
+            c = v_load((float*)curRow + j);
+            p = v_load((float*)prevRow + j);
+            c += a * (p - c);
+            v_store((float*)curRow + j, c);
+        }
+#endif
+        for (; j < rcols.end; j++)
         {
             curRow[j] += adRow[j] * (prevRow[j] - curRow[j]);
         }

@@ -40,6 +40,7 @@
 
 #include <opencv2/core/cvdef.h>
 #include <opencv2/core/utility.hpp>
+#include <opencv2/core/hal/intrin.hpp>
 #include <cmath>
 using namespace std;
 
@@ -154,17 +155,14 @@ inline float getFloatSignBit()
 void add_(float *dst, float *src1, int w)
 {
     int j = 0;
-#if CV_SSE
-    if (CPU_SUPPORT_SSE1())
+#if CV_SIMD128
+    v_float32x4 a, b;
+    for (; j < w - 3; j += 4)
     {
-        __m128 a, b;
-        for (; j < w - 3; j += 4)
-        {
-            a = _mm_loadu_ps(src1 + j);
-            b = _mm_loadu_ps(dst + j);
-            b = _mm_add_ps(b, a);
-            _mm_storeu_ps(dst + j, b);
-        }
+        a = v_load(src1 + j);
+        b = v_load(dst + j);
+        b += a;
+        v_store(dst + j, b);
     }
 #endif
     for (; j < w; j++)
@@ -174,17 +172,14 @@ void add_(float *dst, float *src1, int w)
 void mul(float *dst, float *src1, float *src2, int w)
 {
     int j = 0;
-#if CV_SSE
-    if (CPU_SUPPORT_SSE1())
+#if CV_SIMD128
+    v_float32x4 a, b;
+    for (; j < w - 3; j += 4)
     {
-        __m128 a, b;
-        for (; j < w - 3; j += 4)
-        {
-            a = _mm_loadu_ps(src1 + j);
-            b = _mm_loadu_ps(src2 + j);
-            b = _mm_mul_ps(a, b);
-            _mm_storeu_ps(dst + j, b);
-        }
+        a = v_load(src1 + j);
+        b = v_load(src2 + j);
+        b *= a;
+        v_store(dst + j, b);
     }
 #endif
     for (; j < w; j++)
@@ -194,17 +189,15 @@ void mul(float *dst, float *src1, float *src2, int w)
 void mul(float *dst, float *src1, float src2, int w)
 {
     int j = 0;
-#if CV_SSE
-    if (CPU_SUPPORT_SSE1())
+#if CV_SIMD128
+    float f[4] = {src2, src2, src2, src2};
+    v_float32x4 a, b;
+    b = v_load(f);
+    for (; j < w - 3; j += 4)
     {
-        __m128 a, b;
-        b = _mm_set_ps1(src2);
-        for (; j < w - 3; j += 4)
-        {
-            a = _mm_loadu_ps(src1 + j);
-            a = _mm_mul_ps(a, b);
-            _mm_storeu_ps(dst + j, a);
-        }
+        a = v_load(src1 + j);
+        a *= b;
+        v_store(dst + j, a);
     }
 #endif
     for (; j < w; j++)
@@ -214,19 +207,17 @@ void mul(float *dst, float *src1, float src2, int w)
 void mad(float *dst, float *src1, float alpha, float beta, int w)
 {
     int j = 0;
-#if CV_SSE
-    if (CPU_SUPPORT_SSE1())
+#if CV_SIMD128
+    v_float32x4 a, b, c, d;
+    float fa[4] = {alpha, alpha, alpha, alpha};
+    float fb[4] = {beta, beta, beta, beta};
+    a = v_load(fa);
+    b = v_load(fb);
+    for (; j < w - 3; j += 4)
     {
-        __m128 a, b, c;
-        a = _mm_set_ps1(alpha);
-        b = _mm_set_ps1(beta);
-        for (; j < w - 3; j += 4)
-        {
-            c = _mm_loadu_ps(src1 + j);
-            c = _mm_mul_ps(c, a);
-            c = _mm_add_ps(c, b);
-            _mm_storeu_ps(dst + j, c);
-        }
+        c = v_load(src1 + j);
+        d = c * a + b;
+        v_store(dst + j, d);
     }
 #endif
     for (; j < w; j++)
@@ -236,16 +227,13 @@ void mad(float *dst, float *src1, float alpha, float beta, int w)
 void sqr_(float *dst, float *src1, int w)
 {
     int j = 0;
-#if CV_SSE
-    if (CPU_SUPPORT_SSE1())
+#if CV_SIMD128
+    v_float32x4 a;
+    for (; j < w - 3; j += 4)
     {
-        __m128 a;
-        for (; j < w - 3; j += 4)
-        {
-            a = _mm_loadu_ps(src1 + j);
-            a = _mm_mul_ps(a, a);
-            _mm_storeu_ps(dst + j, a);
-        }
+        a = v_load(src1 + j);
+        a *= a;
+        v_store(dst + j, a);
     }
 #endif
     for (; j < w; j++)
@@ -255,16 +243,15 @@ void sqr_(float *dst, float *src1, int w)
 void sqr_dif(float *dst, float *src1, float *src2, int w)
 {
     int j = 0;
-#if CV_SSE
-    if (CPU_SUPPORT_SSE1())
+#if CV_SIMD128
+    v_float32x4 a, b;
+    for (; j < w - 3; j += 4)
     {
-        __m128 d;
-        for (; j < w - 3; j += 4)
-        {
-            d = _mm_sub_ps(_mm_loadu_ps(src1 + j), _mm_loadu_ps(src2 + j));
-            d = _mm_mul_ps(d, d);
-            _mm_storeu_ps(dst + j, d);
-        }
+        a = v_load(src1 + j);
+        b = v_load(src2 + j);
+        a -= b;
+        a *= a;
+        v_store(dst + j, a);
     }
 #endif
     for (; j < w; j++)
@@ -274,19 +261,15 @@ void sqr_dif(float *dst, float *src1, float *src2, int w)
 void add_mul(float *dst, float *src1, float *src2, int w)
 {
     int j = 0;
-#if CV_SSE
-    if (CPU_SUPPORT_SSE1())
+#if CV_SIMD128
+    v_float32x4 a, b, c;
+    for (; j < w - 3; j += 4)
     {
-        __m128 a, b, c;
-        for (; j < w - 3; j += 4)
-        {
-            a = _mm_loadu_ps(src1 + j);
-            b = _mm_loadu_ps(src2 + j);
-            b = _mm_mul_ps(b, a);
-            c = _mm_loadu_ps(dst + j);
-            c = _mm_add_ps(c, b);
-            _mm_storeu_ps(dst + j, c);
-        }
+        a = v_load(src1 + j);
+        b = v_load(src2 + j);
+        c = v_load(dst + j);
+        c += a * b;
+        v_store(dst + j, c);
     }
 #endif
     for (; j < w; j++)
@@ -298,18 +281,14 @@ void add_mul(float *dst, float *src1, float *src2, int w)
 void add_sqr(float *dst, float *src1, int w)
 {
     int j = 0;
-#if CV_SSE
-    if (CPU_SUPPORT_SSE1())
+#if CV_SIMD
+    v_float32x4 a, b;
+    for (; j < w - 3; j += 4)
     {
-        __m128 a, c;
-        for (; j < w - 3; j += 4)
-        {
-            a = _mm_loadu_ps(src1 + j);
-            a = _mm_mul_ps(a, a);
-            c = _mm_loadu_ps(dst + j);
-            c = _mm_add_ps(c, a);
-            _mm_storeu_ps(dst + j, c);
-        }
+        a = v_load(src1 + j);
+        b = v_load(dst + j);
+        b += a * a;
+        v_store(dst + j, b);
     }
 #endif
     for (; j < w; j++)
@@ -321,18 +300,17 @@ void add_sqr(float *dst, float *src1, int w)
 void add_sqr_dif(float *dst, float *src1, float *src2, int w)
 {
     int j = 0;
-#if CV_SSE
-    if (CPU_SUPPORT_SSE1())
+#if CV_SIMD128
+    v_float32x4 a, b, c;
+    for (; j < w - 3; j += 4)
     {
-        __m128 a, d;
-        for (; j < w - 3; j += 4)
-        {
-            d = _mm_sub_ps(_mm_loadu_ps(src1 + j), _mm_loadu_ps(src2 + j));
-            d = _mm_mul_ps(d, d);
-            a = _mm_loadu_ps(dst + j);
-            a = _mm_add_ps(a, d);
-            _mm_storeu_ps(dst + j, a);
-        }
+        a = v_load(src1 + j);
+        b = v_load(src2 + j);
+        c = v_load(dst + j);
+        a -= b;
+        a *= a;
+        c += a;
+        v_store(dst + j, c);
     }
 #endif
     for (; j < w; j++)
@@ -344,19 +322,15 @@ void add_sqr_dif(float *dst, float *src1, float *src2, int w)
 void sub_mul(float *dst, float *src1, float *src2, int w)
 {
     int j = 0;
-#if CV_SSE
-    if (CPU_SUPPORT_SSE1())
+#if CV_SIMD128
+    v_float32x4 a, b, c;
+    for (; j < w - 3; j += 4)
     {
-        __m128 a, b, c;
-        for (; j < w - 3; j += 4)
-        {
-            a = _mm_loadu_ps(src1 + j);
-            b = _mm_loadu_ps(src2 + j);
-            b = _mm_mul_ps(b, a);
-            c = _mm_loadu_ps(dst + j);
-            c = _mm_sub_ps(c, b);
-            _mm_storeu_ps(dst + j, c);
-        }
+        a = v_load(src1 + j);
+        b = v_load(src2 + j);
+        c = v_load(dst + j);
+        c -= a * b;
+        v_store(dst + j, c);
     }
 #endif
     for (; j < w; j++)
@@ -366,21 +340,17 @@ void sub_mul(float *dst, float *src1, float *src2, int w)
 void sub_mad(float *dst, float *src1, float *src2, float c0, int w)
 {
     int j = 0;
-#if CV_SSE
-    if (CPU_SUPPORT_SSE1())
+#if CV_SIMD128
+    float fc0[4] = {c0, c0, c0, c0};
+    v_float32x4 a, b, c;
+    v_float32x4 cnst = v_load(fc0);
+    for (; j < w - 3; j += 4)
     {
-        __m128 a, b, c;
-        __m128 cnst = _mm_set_ps1(c0);
-        for (; j < w - 3; j += 4)
-        {
-            a = _mm_loadu_ps(src1 + j);
-            b = _mm_loadu_ps(src2 + j);
-            b = _mm_mul_ps(b, a);
-            c = _mm_loadu_ps(dst + j);
-            c = _mm_sub_ps(c, cnst);
-            c = _mm_sub_ps(c, b);
-            _mm_storeu_ps(dst + j, c);
-        }
+        a = v_load(src1 + j);
+        b = v_load(src2 + j);
+        c = v_load(dst + j);
+        c -= a * b - cnst;
+        v_store(dst + j, c);
     }
 #endif
     for (; j < w; j++)
@@ -390,17 +360,16 @@ void sub_mad(float *dst, float *src1, float *src2, float c0, int w)
 void det_2x2(float *dst, float *a00, float *a01, float *a10, float *a11, int w)
 {
     int j = 0;
-#if CV_SSE
-    if (CPU_SUPPORT_SSE1())
+#if CV_SIMD128
+    v_float32x4 v_a00, v_a01, v_a10, v_a11, d;
+    for (; j < w - 3; j += 4)
     {
-        __m128 a, b;
-        for (; j < w - 3; j += 4)
-        {
-            a = _mm_mul_ps(_mm_loadu_ps(a00 + j), _mm_loadu_ps(a11 + j));
-            b = _mm_mul_ps(_mm_loadu_ps(a01 + j), _mm_loadu_ps(a10 + j));
-            a = _mm_sub_ps(a, b);
-            _mm_storeu_ps(dst + j, a);
-        }
+        v_a00 = v_load(a00 + j);
+        v_a01 = v_load(a01 + j);
+        v_a10 = v_load(a10 + j);
+        v_a11 = v_load(a11 + j);
+        d = v_a00 * v_a11 - v_a01 * v_a10;
+        v_store(dst + j, d);
     }
 #endif
     for (; j < w; j++)
@@ -410,32 +379,22 @@ void det_2x2(float *dst, float *a00, float *a01, float *a10, float *a11, int w)
 void div_det_2x2(float *a00, float *a01, float *a11, int w)
 {
     int j = 0;
-#if CV_SSE
-    if (CPU_SUPPORT_SSE1())
+#if CV_SIMD128
+    // float sign_mask[4] = {getFloatSignBit(), getFloatSignBit(), getFloatSignBit(), getFloatSignBit()};
+
+    v_float32x4 _a00, _a01, _a11, _det;
+    for (; j < w - 3; j += 4)
     {
-        const __m128 SIGN_MASK = _mm_set_ps1(getFloatSignBit());
-
-        __m128 a, b, _a00, _a01, _a11;
-        for (; j < w - 3; j += 4)
-        {
-            _a00 = _mm_loadu_ps(a00 + j);
-            _a11 = _mm_loadu_ps(a11 + j);
-            a = _mm_mul_ps(_a00, _a11);
-
-            _a01 = _mm_loadu_ps(a01 + j);
-            _a01 = _mm_xor_ps(_a01, SIGN_MASK);
-            b = _mm_mul_ps(_a01, _a01);
-
-            a = _mm_sub_ps(a, b);
-
-            _a01 = _mm_div_ps(_a01, a);
-            _a00 = _mm_div_ps(_a00, a);
-            _a11 = _mm_div_ps(_a11, a);
-
-            _mm_storeu_ps(a01 + j, _a01);
-            _mm_storeu_ps(a00 + j, _a00);
-            _mm_storeu_ps(a11 + j, _a11);
-        }
+        _a00 = v_load(a00 + j);
+        _a01 = v_load(a01 + j);
+        _a11 = v_load(a11 + j);
+        _det = _a00 * _a11 - _a01 * _a01;
+        _a00 /= _det;
+        _a01 /= _det;
+        _a11 /= _det;
+        v_store(a01 + j, _a01);
+        v_store(a00 + j, _a00);
+        v_store(a11 + j, _a11);
     }
 #endif
     for (; j < w; j++)
@@ -450,16 +409,14 @@ void div_det_2x2(float *a00, float *a01, float *a11, int w)
 void div_1x(float *a1, float *b1, int w)
 {
     int j = 0;
-#if CV_SSE
-    if (CPU_SUPPORT_SSE1())
+#if CV_SIMD128
+    v_float32x4 _a1, _b1;
+    for (; j < w - 3; j += 4)
     {
-        __m128 _a1, _b1;
-        for (; j < w - 3; j += 4)
-        {
-            _b1 = _mm_loadu_ps(b1 + j);
-            _a1 = _mm_loadu_ps(a1 + j);
-            _mm_storeu_ps(a1 + j, _mm_div_ps(_a1, _b1));
-        }
+        _b1 = v_load(b1 + j);
+        _a1 = v_load(a1 + j);
+        _a1 /= _b1;
+        v_store(a1 + j, _a1);
     }
 #endif
     for (; j < w; j++)
@@ -471,15 +428,14 @@ void div_1x(float *a1, float *b1, int w)
 void inv_self(float *src, int w)
 {
     int j = 0;
-#if CV_SSE
-    if (CPU_SUPPORT_SSE1())
+#if CV_SIMD128
+    float f1[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    v_float32x4 _1 = v_load(f1);
+    v_float32x4 a;
+    for (; j < w - 3; j += 4)
     {
-        __m128 a;
-        for (; j < w - 3; j += 4)
-        {
-            a = _mm_rcp_ps(_mm_loadu_ps(src + j));
-            _mm_storeu_ps(src + j, a);
-        }
+        a = v_load(src + j);
+        v_store(src + j, _1 / a);
     }
 #endif
     for (; j < w; j++)
@@ -491,15 +447,12 @@ void inv_self(float *src, int w)
 void sqrt_(float *dst, float *src, int w)
 {
     int j = 0;
-#if CV_SSE
-    if (CPU_SUPPORT_SSE1())
+#if CV_SIMD128
+    v_float32x4 a;
+    for (; j < w - 3; j += 4)
     {
-        __m128 a;
-        for (; j < w - 3; j += 4)
-        {
-            a = _mm_sqrt_ps(_mm_loadu_ps(src + j));
-            _mm_storeu_ps(dst + j, a);
-        }
+        a = v_sqrt(v_load(src + j));
+        v_store(dst + j, a);
     }
 #endif
     for (; j < w; j++)
@@ -509,18 +462,15 @@ void sqrt_(float *dst, float *src, int w)
 void min_(float *dst, float *src1, float *src2, int w)
 {
     int j = 0;
-#if CV_SSE
-    if (CPU_SUPPORT_SSE1())
+#if CV_SIMD128
+    v_float32 a, b;
+    for (; j < w - 3; j += 4)
     {
-        __m128 a, b;
-        for (; j < w - 3; j += 4)
-        {
-            a = _mm_loadu_ps(src1 + j);
-            b = _mm_loadu_ps(src2 + j);
-            b = _mm_min_ps(b, a);
+        a = v_load(src1 + j);
+        b = v_load(src2 + j);
+        b = v_min(b, a);
 
-            _mm_storeu_ps(dst + j, b);
-        }
+        v_store(dst + j, b);
     }
 #endif
     for (; j < w; j++)
@@ -530,20 +480,16 @@ void min_(float *dst, float *src1, float *src2, int w)
 void rf_vert_row_pass(float *curRow, float *prevRow, float alphaVal, int w)
 {
     int j = 0;
-#if CV_SSE
-    if (CPU_SUPPORT_SSE1())
+#if CV_SIMD128
+    v_float32x4 cur, prev, res;
+    float falpha[4] = {alphaVal, alphaVal, alphaVal, alphaVal};
+    v_float32x4 alpha = v_load(falpha);
+    for (; j < w - 3; j += 4)
     {
-        __m128 cur, prev, res;
-        __m128 alpha = _mm_set_ps1(alphaVal);
-        for (; j < w - 3; j += 4)
-        {
-            cur = _mm_loadu_ps(curRow + j);
-            prev = _mm_loadu_ps(prevRow + j);
-
-            res = _mm_mul_ps(alpha, _mm_sub_ps(prev, cur));
-            res = _mm_add_ps(res, cur);
-            _mm_storeu_ps(curRow + j, res);
-        }
+        cur = v_load(curRow + j);
+        prev = v_load(prevRow + j);
+        cur += alpha * (prev - cur);
+        v_store(curRow + j, cur);
     }
 #endif
     for (; j < w; j++)
